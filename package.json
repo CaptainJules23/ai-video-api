@@ -1,0 +1,8 @@
+{
+  "name": "ai-video-api",
+  "type": "module",
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "googleapis": "^131.0.0"
+  }
+}
