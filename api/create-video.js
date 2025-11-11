@@ -1,46 +1,46 @@
-import fetch from "node-fetch";
+import OpenAI from "openai";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST requests allowed" });
-  }
-
-  const { prompt } = req.body || {};
-  if (!prompt) {
-    return res.status(400).json({ error: "Missing prompt" });
+    return res.status(405).json({ ok: false, message: "Only POST allowed" });
   }
 
   try {
-    // === 1) OpenAI GPT-4o-mini: Drehbuch generieren ===
-    const gptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: `Schreibe ein kurzes Drehbuch (ca. 60 Sekunden) für ein Social-Media-Video über: ${prompt}`
-          }
-        ],
-      }),
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ ok: false, message: "Missing prompt" });
+    }
+
+    // OpenAI Client mit deinem API-Key
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_KEY,
     });
 
-    const gptData = await gptResponse.json();
-    const script = gptData.choices?.[0]?.message?.content || prompt;
+    // Anfrage an OpenAI — Textgenerierung
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini", // du kannst auch "gpt-4o" oder "gpt-3.5-turbo" nehmen
+      messages: [
+        {
+          role: "system",
+          content:
+            "Du bist ein professioneller Video-Drehbuchautor. Schreibe kurze, interessante Skripte (max. 60 Sekunden) zu einem Thema.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
 
-    // === 2) Rückgabe an Client ===
+    const script = response.choices[0]?.message?.content || "Fehler beim Generieren.";
+
     return res.status(200).json({
       ok: true,
-      prompt: prompt,
-      script: script
+      prompt,
+      script,
     });
-
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: error.message || String(error) });
+    console.error("Fehler:", error);
+    return res.status(500).json({ ok: false, message: error.message });
   }
 }
