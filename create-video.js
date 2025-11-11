@@ -2,6 +2,9 @@ import fetch from "node-fetch";
 import { google } from "googleapis";
 
 export default async function handler(req, res) {
+  if (req.headers['x-api-secret'] !== process.env.API_SECRET) {
+  return res.status(401).json({ error: 'unauthorized' });
+  }
   if (req.method !== "POST") return res.status(405).end();
   const { prompt } = req.body;
   if (!prompt) return res.status(400).json({ error: "Missing prompt" });
