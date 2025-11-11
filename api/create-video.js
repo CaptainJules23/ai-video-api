@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // === 1) OpenAI GPT-4o-mini Textgenerierung ===
+    // === 1) OpenAI GPT-4o-mini: Drehbuch generieren ===
     const gptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     const gptData = await gptResponse.json();
     const script = gptData.choices?.[0]?.message?.content || prompt;
 
-    // === 2) Rückgabe an den Client ===
+    // === 2) Rückgabe an Client ===
     return res.status(200).json({
       ok: true,
       prompt: prompt,
