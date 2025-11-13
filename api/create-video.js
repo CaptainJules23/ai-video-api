@@ -1,22 +1,32 @@
 import OpenAI from "openai";
 
+export const config = {
+  runtime: "edge",
+};
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export default async function handler(req, res) {
+export default async function handler(req) {
   try {
-    // 1️⃣ Anfrage prüfen
     if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, message: "Only POST requests allowed" });
+      return new Response(
+        JSON.stringify({ ok: false, message: "Only POST requests allowed" }),
+        { status: 405 }
+      );
     }
 
-    const { prompt } = req.body || {};
+    const body = await req.json();
+    const prompt = body?.prompt;
     if (!prompt) {
-      return res.status(400).json({ ok: false, message: "Missing prompt" });
+      return new Response(
+        JSON.stringify({ ok: false, message: "Missing prompt" }),
+        { status: 400 }
+      );
     }
 
-    // 2️⃣ Skript mit GPT-4o-mini generieren
+    // 1️⃣ Script generieren
     const scriptResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -30,30 +40,35 @@ export default async function handler(req, res) {
 
     const script = scriptResponse.choices[0].message.content.trim();
 
-    // 3️⃣ Stimme mit OpenAI-TTS erzeugen
+    // 2️⃣ Stimme erzeugen
     const speechResponse = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
       voice: "alloy",
       input: script,
     });
 
-    // 4️⃣ Audio als Base64 zurückgeben (statt Datei)
-    const audioBuffer = Buffer.from(await speechResponse.arrayBuffer());
-    const audioBase64 = audioBuffer.toString("base64");
+    const arrayBuffer = await speechResponse.arrayBuffer();
+    const audioBase64 = Buffer.from(arrayBuffer).toString("base64");
 
-    // 5️⃣ Antwort
-    res.status(200).json({
-      ok: true,
-      prompt,
-      script,
-      audioBase64,
-      message: "Audio und Script erfolgreich generiert",
-    });
+    // 3️⃣ Antwort zurück
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        prompt,
+        script,
+        audioBase64,
+        message: "Audio und Script erfolgreich generiert",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
   } catch (error) {
     console.error("Fehler:", error);
-    res.status(500).json({
-      ok: false,
-      message: error.message || "Unbekannter Serverfehler",
-    });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        message: error.message || "Unbekannter Serverfehler",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
