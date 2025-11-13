@@ -1,83 +1,62 @@
 import OpenAI from "openai";
 
-export const config = {
-  runtime: "edge",
-};
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, message: "Only POST allowed" });
+  }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-export default async function handler(req) {
   try {
-    if (req.method !== "POST") {
-      return new Response(
-        JSON.stringify({ ok: false, message: "Only POST requests allowed" }),
-        { status: 405 }
-      );
-    }
-
-    const body = await req.json();
-    const prompt = body?.prompt;
+    const { prompt } = req.body;
     if (!prompt) {
-      return new Response(
-        JSON.stringify({ ok: false, message: "Missing prompt" }),
-        { status: 400 }
-      );
+      return res.status(400).json({ ok: false, message: "Missing prompt" });
     }
 
-    // 1️⃣ Script generieren
-    const scriptResponse = await openai.chat.completions.create({
+    // 🔑 OpenAI Client mit deinem API-Key
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_KEY,
+    });
+
+    // 🧠 1️⃣ Text generieren (Skript)
+    const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
+          role: "system",
+          content:
+            "Du bist ein professioneller Video-Drehbuchautor. Schreibe kurze, interessante Skripte (max. 60 Sekunden) zu einem Thema.",
+        },
+        {
           role: "user",
-          content: `Erstelle ein kurzes, spannendes Skript für ein KI-Video über folgendes Thema: ${prompt}. Verwende einfache Sprache und maximal 5 Sätze.`,
+          content: prompt,
         },
       ],
     });
 
-    const script = scriptResponse.choices[0].message.content.trim();
+    const script =
+      response.choices[0]?.message?.content?.trim() || "Fehler beim Generieren.";
 
-    // 2️⃣ Stimme erzeugen (TTS)
-    const speechResponse = await openai.audio.speech.create({
+    // 🔊 2️⃣ Audio generieren (TTS)
+    const speech = await client.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "alloy",
+      voice: "alloy", // Stimmen: alloy, verse, coral, etc.
       input: script,
     });
 
-    // ⚙️ In Base64 konvertieren (Edge-kompatibel)
-    const arrayBuffer = await speechResponse.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(arrayBuffer);
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode.apply(null, chunk);
-    }
-    const audioBase64 = btoa(binary);
+    // 🧩 3️⃣ In Base64 umwandeln
+    const arrayBuffer = await speech.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const audioBase64 = buffer.toString("base64");
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        prompt,
-        script,
-        audioBase64,
-        message: "Audio und Script erfolgreich generiert",
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    // ✅ 4️⃣ Ergebnis senden
+    return res.status(200).json({
+      ok: true,
+      prompt,
+      script,
+      audioBase64,
+      message: "Script und Audio erfolgreich generiert",
+    });
   } catch (error) {
     console.error("Fehler:", error);
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        message: error.message || "Unbekannter Serverfehler",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return res.status(500).json({ ok: false, message: error.message });
   }
 }
