@@ -1,46 +1,59 @@
 import OpenAI from "openai";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, message: "Only POST allowed" });
-  }
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
+export default async function handler(req, res) {
   try {
-    const { prompt } = req.body;
+    // 1️⃣ Anfrage prüfen
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, message: "Only POST requests allowed" });
+    }
+
+    const { prompt } = req.body || {};
     if (!prompt) {
       return res.status(400).json({ ok: false, message: "Missing prompt" });
     }
 
-    // OpenAI Client mit deinem API-Key
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_KEY,
-    });
-
-    // Anfrage an OpenAI — Textgenerierung
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini", // du kannst auch "gpt-4o" oder "gpt-3.5-turbo" nehmen
+    // 2️⃣ Skript mit GPT-4o-mini generieren
+    const scriptResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         {
-          role: "system",
-          content:
-            "Du bist ein professioneller Video-Drehbuchautor. Schreibe kurze, interessante Skripte (max. 60 Sekunden) zu einem Thema.",
-        },
-        {
           role: "user",
-          content: prompt,
+          content: `Erstelle ein kurzes, spannendes Skript für ein KI-Video über folgendes Thema: ${prompt}. 
+                    Verwende einfache Sprache und maximal 5 Sätze.`,
         },
       ],
     });
 
-    const script = response.choices[0]?.message?.content || "Fehler beim Generieren.";
+    const script = scriptResponse.choices[0].message.content.trim();
 
-    return res.status(200).json({
+    // 3️⃣ Stimme mit OpenAI-TTS erzeugen
+    const speechResponse = await openai.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",
+      input: script,
+    });
+
+    // 4️⃣ Audio als Base64 zurückgeben (statt Datei)
+    const audioBuffer = Buffer.from(await speechResponse.arrayBuffer());
+    const audioBase64 = audioBuffer.toString("base64");
+
+    // 5️⃣ Antwort
+    res.status(200).json({
       ok: true,
       prompt,
       script,
+      audioBase64,
+      message: "Audio und Script erfolgreich generiert",
     });
   } catch (error) {
     console.error("Fehler:", error);
-    return res.status(500).json({ ok: false, message: error.message });
+    res.status(500).json({
+      ok: false,
+      message: error.message || "Unbekannter Serverfehler",
+    });
   }
 }
