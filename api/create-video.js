@@ -11,14 +11,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, message: "Missing prompt" });
     }
 
-    // 🔑 OpenAI Client mit deinem API-Key
+    // OpenAI Client mit deinem API-Key
     const client = new OpenAI({
       apiKey: process.env.OPENAI_KEY,
     });
 
-    // 🧠 1️⃣ Text generieren (Skript)
+    // Anfrage an OpenAI — Textgenerierung
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o-mini", // du kannst auch "gpt-4o" oder "gpt-3.5-turbo" nehmen
       messages: [
         {
           role: "system",
@@ -32,28 +32,12 @@ export default async function handler(req, res) {
       ],
     });
 
-    const script =
-      response.choices[0]?.message?.content?.trim() || "Fehler beim Generieren.";
+    const script = response.choices[0]?.message?.content || "Fehler beim Generieren.";
 
-    // 🔊 2️⃣ Audio generieren (TTS)
-    const speech = await client.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy", // Stimmen: alloy, verse, coral, etc.
-      input: script,
-    });
-
-    // 🧩 3️⃣ In Base64 umwandeln
-    const arrayBuffer = await speech.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const audioBase64 = buffer.toString("base64");
-
-    // ✅ 4️⃣ Ergebnis senden
     return res.status(200).json({
       ok: true,
       prompt,
       script,
-      audioBase64,
-      message: "Script und Audio erfolgreich generiert",
     });
   } catch (error) {
     console.error("Fehler:", error);
