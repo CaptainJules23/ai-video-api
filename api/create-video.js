@@ -1,46 +1,84 @@
 import OpenAI from "openai";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, message: "Only POST allowed" });
-  }
+export const config = {
+  runtime: "edge",
+};
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_KEY,
+});
+
+export default async function handler(req) {
   try {
-    const { prompt } = req.body;
-    if (!prompt) {
-      return res.status(400).json({ ok: false, message: "Missing prompt" });
+    if (req.method !== "POST") {
+      return new Response(
+        JSON.stringify({ ok: false, message: "Only POST allowed" }),
+        { status: 405, headers: { "Content-Type": "application/json" } }
+      );
     }
 
-    // OpenAI Client mit deinem API-Key
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_KEY,
-    });
+    const { prompt } = await req.json();
+    if (!prompt) {
+      return new Response(
+        JSON.stringify({ ok: false, message: "Missing prompt" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
-    // Anfrage an OpenAI — Textgenerierung
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini", // du kannst auch "gpt-4o" oder "gpt-3.5-turbo" nehmen
+    // 🧠 1️⃣ Text generieren
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content:
             "Du bist ein professioneller Video-Drehbuchautor. Schreibe kurze, interessante Skripte (max. 60 Sekunden) zu einem Thema.",
         },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "user", content: prompt },
       ],
     });
 
-    const script = response.choices[0]?.message?.content || "Fehler beim Generieren.";
+    const script =
+      response.choices[0]?.message?.content?.trim() ||
+      "Fehler beim Generieren.";
 
-    return res.status(200).json({
-      ok: true,
-      prompt,
-      script,
+    // 🔊 2️⃣ Audio generieren (Edge-kompatibel)
+    const speech = await openai.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",
+      input: script,
     });
+
+    // 🧩 3️⃣ ArrayBuffer → Base64 (ohne Buffer)
+    const arrayBuffer = await speech.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    const audioBase64 = btoa(binary);
+
+    // ✅ 4️⃣ Ergebnis zurückgeben
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        prompt,
+        script,
+        audioBase64,
+        message: "Script und Audio erfolgreich generiert",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
   } catch (error) {
     console.error("Fehler:", error);
-    return res.status(500).json({ ok: false, message: error.message });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        message: error.message || "Unbekannter Serverfehler",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
