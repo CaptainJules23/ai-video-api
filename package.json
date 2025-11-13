@@ -1,8 +1,9 @@
 {
-  "name": "ai-video-api",
+  "name": "ai-video-api-rust",
   "version": "1.0.0",
-  "type": "module",
+  "main": "index.js",
   "dependencies": {
-    "openai": "^4.0.0"
+    "openai": "^5.2.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0"
   }
 }
